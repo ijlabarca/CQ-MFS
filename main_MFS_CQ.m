@@ -7,7 +7,6 @@
 % date:   July 2020
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% c      : wavespeed
 % T      : Final time
 % M      : Number of time steps
 % dt     : time step
