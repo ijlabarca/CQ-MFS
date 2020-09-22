@@ -34,8 +34,19 @@ close all
 tic 
 warning('off');
 
+
+%%%%%%%%%%%%%%%%%%%%%%
+% Problems:
+%%%%%%%%%%%%%%%%%%%%%%
+% Circle           : 0
+% Rounded Triangle : 1
+% Inverted Ellipse : 2
+%%%%%%%%%%%%%%%%%%%%%%
+problem = 0;
+
+
 % Wave speed
-c =1; % exterior domain
+wavespeed =1; % exterior domain
 
 Ms = [50 100 200 400 800 1600];
 
@@ -44,9 +55,14 @@ Rp = 1.2;
 
 a1 = 0.3;
 a2 = 0.25;
-% Z = @(z) z; % Circle
-% Z = @(z) z+a1./(z.^2); % Rounded triangle;
-Z = @(z) z./(1+a2.*z.^2); % Inverted ellipse;
+
+if problem == 0
+    Z = @(z) z; % Circle
+elseif problem == 1
+    Z = @(z) z+a1./(z.^2); % Rounded triangle;
+else
+    Z = @(z) z./(1+a2.*z.^2); % Inverted ellipse;
+end
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -61,7 +77,6 @@ for M = Ms
     
 dt = T/M; % time increment
 tt=(0:dt:T);  
-% lambda = max([dt^(3/M) eps^(1/2/M)]); % radious complex 
 lambda = eps^(1/2/M);
 
 zN = exp(2i*pi/(M+1));
@@ -78,7 +93,7 @@ kl = 1i*sl; % complex wavenumbers
 % We compute half of the wavenumbers
 k_hlf = [kl(1) kl(end:-1:(end-1)/2+2)];
 
-Np = 800; 
+Np = 500; 
 N = 2*Np;
 %% Create the geometry
 
@@ -126,15 +141,14 @@ alphap_hlf = zeros(Np,M/2+1);
 hbar = parfor_progressbar(M,['Solving linear systems... M = ',num2str(M/2)]);
 for n=1:M/2+1
 
-    k = k_hlf(n)/c;
+    k = k_hlf(n)/wavespeed;
     A = 1i/4*besselh(0, k*sqrt((x1-y1).^2 + (x2-y2).^2));
     
     if min(min(abs(A))) < 1e-20
         A(abs(A) < 1e-20) = 0;
         A = sparse(A);
-
-
     end
+    
     alphap_hlf(:,n) = A\g_hlf(:,n);
     hbar.iterate(1);
     
@@ -147,8 +161,14 @@ clc
 % We evaluate the solution 'up' in the set of points 'pts'.
 % then, we recover time domain solution 'u'.
 
-% pts = 0.25*[2 2;2 -2;-2 -2;-2 2];
-pts = 0.25*[-2 -2;-2 2;0 0;2 0];
+
+
+if problem == 0 || problem == 1
+    pts = 0.25*[2 2;2 -2;-2 -2;-2 2];
+elseif problem == 1
+    pts = 0.25*[-2 -2;-2 2;0 0;2 0];
+end
+
 Ntot = size(pts,1);
 
 in = inpolygon(pts(:, 1), pts(:, 2), x(:, 1), x(:, 2));
@@ -158,7 +178,7 @@ up_hlf = zeros(Ntot,M/2+1);
 
 
 for n=1:M/2+1
-    k = k_hlf(n)/c;  
+    k = k_hlf(n)/wavespeed;  
     for m = 1:Np
     up_hlf(:, n) = up_hlf(:, n)+ alphap_hlf(m, n)*1i/4*besselh(0, k*sqrt((pts(:,1)-xp(m, 1)).^2 + (pts(:,2)-xp(m, 2)).^2));
     end
@@ -175,7 +195,7 @@ u = Lam.^(-1).*ifft(up,[],2);
 % Reference solution
 uinc = zeros(size(u));
 for n=1:M+1 
-[uinc(:,n),~] = incident_field(pts,c*(tt(n)));
+[uinc(:,n),~] = incident_field(pts,wavespeed*(tt(n)));
 end
 
 u(in, :) = u(in, :) + uinc(in, :);
@@ -224,10 +244,10 @@ lambda = eps^(1/2/M);
 zN = exp(2i*pi/M);
 
 if RK == 1
-Ark=[5/12 -1/12; 3/4 1/4]; % Radau IIa 2nd order     
+A_RK=[5/12 -1/12; 3/4 1/4]; % Radau IIa 2nd order     
 
 else
-Ark=[11/45 37/225 -2/225; ...                     % Radau IIa 5th order
+A_RK=[11/45 37/225 -2/225; ...                     % Radau IIa 5th order
      37/225 11/45 -2/225; ...
      4/9 4/9 1/9] + ...
     [-7*sqrt(6)/360 -169*sqrt(6)/1800 sqrt(6)/75; ...
@@ -236,13 +256,13 @@ Ark=[11/45 37/225 -2/225; ...                     % Radau IIa 5th order
 
 end
 
-b=Ark(end,:);
-S=size(Ark,1);
-Am1 = inv(Ark);
-crk=Ark*ones(S,1);
-B = (Am1*ones(size(Ark,1),1))*[zeros(1,S-1),1];
+b=A_RK(end,:);
+stages=size(A_RK,1);
+invA = inv(A_RK);
+c=A_RK*ones(stages,1);
+B = (invA*ones(size(A_RK,1),1))*[zeros(1,stages-1),1];
 
-Np = 800;
+Np = 500;
 N = 2*Np;
 %% Create the geometry
 
@@ -267,34 +287,34 @@ idx_Np=@(s) (s-1)*Np+1:s*Np;
 
 %% Right Hand side
 
-F =zeros(N,S,M);
-for st=1:S
+F =zeros(N,stages,M);
+for st=1:stages
     
     for n=1:M
-    [g1(:,n),~] = incident_field(x,c*(tt(n)+dt*crk(st)));
+    [g1(:,n),~] = incident_field(x,wavespeed*(tt(n)+dt*c(st)));
     end
     F(:,st, :) = g1; clear g1
 end
-F = reshape(F, [S*N, M]);
+F = reshape(F, [stages*N, M]);
 
 %% Computing the Z-transform of boundary data
-Lam = repmat(lambda.^(0:M-1),S*N,1);
+Lam = repmat(lambda.^(0:M-1),stages*N,1);
 F = fft(Lam.*F,[],2);
 
-%% Solution of the problem in the frequency domains
-alphap_hlf = zeros(Np*S,M);
+%% Solution of the problem in the frequency domain
+alphap_hlf = zeros(Np*stages,M);
 
 hbar = parfor_progressbar(floor(M/2),['Solving linear systems... M = ',num2str(M/2)]);
 tic
 for n=0:floor(M/2)
-    [P,Lambda]=eig(Am1-lambda*zN^(-(n))*B);
+    [P,Lambda]=eig(invA-lambda*zN^(-(n))*B);
     Lambda=diag(Lambda)/dt;
     gl=kron(inv(P),speye(N))*F(:,n+1);
 
-    ul=zeros(S*Np,1);
+    ul=zeros(stages*Np,1);
 
-    for s=1:S
-        k = 1i*Lambda(s)/c;
+    for s=1:stages
+        k = 1i*Lambda(s)/wavespeed;
         A = 1i/4*besselh(0, k*sqrt((x1-y1).^2 + (x2-y2).^2));
         if min(min(abs(A))) < 1e-20
             A(abs(A) < 1e-20) = 0;
@@ -316,8 +336,11 @@ alphap_hlf(:,M+1-(1:floor((M-1)/2))) = conj(alphap_hlf(:,2:floor((M-1)/2)+1));
 
 
 
-pts = 0.25*[-2 -2;-2 2;0 0;2 0];  % for rounded triangle
-% pts = 0.25*[2 2;2 -2;-2 -2;-2 2];  % else
+if problem == 0 || problem == 1
+    pts = 0.25*[2 2;2 -2;-2 -2;-2 2];
+elseif problem == 1
+    pts = 0.25*[-2 -2;-2 2;0 0;2 0];
+end
 
 Ntot = size(pts, 1);
 
@@ -326,19 +349,19 @@ in = inpolygon(pts(:, 1), pts(:, 2), x(:, 1), x(:, 2));
 idx=@(s) (s-1)*Ntot+1:(s*Ntot); 
 idy=@(s) (s-1)*Np+1:(s*Np);
 
-u_hlf = zeros(S*Ntot,M);
+u_hlf = zeros(stages*Ntot,M);
 tic
 for n=1:M
-    [P,Lambda]=eig(Am1-lambda*zN^(-(n-1))*B);
+    [P,Lambda]=eig(invA-lambda*zN^(-(n-1))*B);
     Lambda=diag(Lambda)/dt;
 
     gl=alphap_hlf(:,n);
-    ul=zeros(S*Ntot,1);
+    ul=zeros(stages*Ntot,1);
 
-    for s=1:S
+    for s=1:stages
         
     u_s = zeros(Ntot, 1);
-    k = 1i*Lambda(s)/c;
+    k = 1i*Lambda(s)/wavespeed;
     alpha = gl(idy(s));
     for m = 1:Np
         u_s = u_s+ alpha(m)*1i/4*besselh(0, k*sqrt((pts(:,1)-xp(m, 1)).^2 + (pts(:,2)-xp(m, 2)).^2));
@@ -350,16 +373,16 @@ for n=1:M
 end
 
 % Inverting Z-transform
-Lam = repmat(lambda.^(0:M-1),S*Ntot,1);
+Lam = repmat(lambda.^(0:M-1),stages*Ntot,1);
 
 
 u = Lam.^(-1).*ifft(u_hlf,[],2);
-u = u((S-1)*Ntot+1:end,:);
+u = u((stages-1)*Ntot+1:end,:);
 u = [zeros(size(u, 1), 1) u];
 
 uinc = zeros(size(u));
 for n=2:M+1
-[uinc(:,n),~] = incident_field(pts,c*(tt(n)));
+[uinc(:,n),~] = incident_field(pts,wavespeed*(tt(n)));
   
 end
 

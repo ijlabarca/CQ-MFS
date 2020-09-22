@@ -30,8 +30,21 @@ clear
 close all
 tic 
 warning('off');
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%
+% Problems:
+%%%%%%%%%%%%%%%%%%%%%%
+% Circle           : 0
+% Rounded Triangle : 1
+% Inverted Ellipse : 2
+%%%%%%%%%%%%%%%%%%%%%%
+problem = 0;
+
+
 % Wave speed
-c =1; % exterior domain
+wavespeed =1; % exterior domain
 
 Ms = [50 100 200 400 800];
 Mmax = 2*max(Ms);
@@ -43,9 +56,14 @@ Rp = 0.8;  % radius boundary Sigma : charge points
 
 a1 = 0.3;
 a2 = 0.25;
-% Z = @(z) z; % Circle
-% Z = @(z) z+a1./(z.^2); % Rounded triangle;
-Z = @(z) z./(1+a2.*z.^2); % Inverted ellipse;
+
+if problem == 0
+    Z = @(z) z; % Circle
+elseif problem == 1
+    Z = @(z) z+a1./(z.^2); % Rounded triangle;
+else
+    Z = @(z) z./(1+a2.*z.^2); % Inverted ellipse;
+end
 
 pts = [2 2;2 -2;-2 -2;-2 2];
 Ntot = size(pts, 1);
@@ -81,10 +99,10 @@ lambda = eps^(1/2/M);
 zN = exp(2i*pi/M);
 
 if RK == 1
-Ark=[5/12 -1/12; 3/4 1/4]; % Radau IIa 2nd order
+A_RK=[5/12 -1/12; 3/4 1/4]; % Radau IIa 2nd order
 
 else
-Ark=[11/45 37/225 -2/225; ...                     % Radau IIa 5th order
+A_RK=[11/45 37/225 -2/225; ...                     % Radau IIa 5th order
      37/225 11/45 -2/225; ...
      4/9 4/9 1/9] + ...
     [-7*sqrt(6)/360 -169*sqrt(6)/1800 sqrt(6)/75; ...
@@ -92,13 +110,13 @@ Ark=[11/45 37/225 -2/225; ...                     % Radau IIa 5th order
      -sqrt(6)/36 sqrt(6)/36 0];
 
 end
-b=Ark(end,:);
-S=size(Ark,1);
-Am1 = inv(Ark);
-crk=Ark*ones(S,1);
-B = (Am1*ones(size(Ark,1),1))*[zeros(1,S-1),1];
+b=A_RK(end,:);
+stages=size(A_RK,1);
+invA = inv(A_RK);
+c=A_RK*ones(stages,1);
+B = (invA*ones(size(A_RK,1),1))*[zeros(1,stages-1),1];
 
-Np = 1000;
+Np = 300;
 N = 2*Np;
 
 %% Create the geometry
@@ -130,11 +148,11 @@ idx_Np=@(s) (s-1)*Np+1:s*Np;
 
 %% Right Hand side
 
-F =zeros(N,S,M);
-for st=1:S
+F =zeros(N,stages,M);
+for st=1:stages
     
     for n=1:M
-    [g1(:,n),~] = incident_field(x,c*(tt(n)+dt*crk(st)));
+    [g1(:,n),~] = incident_field(x,wavespeed*(tt(n)+dt*c(st)));
     end
 
 
@@ -144,7 +162,7 @@ for st=1:S
 end
 
 
-F = reshape(F, [S*N, M]);
+F = reshape(F, [stages*N, M]);
 
 
 
@@ -152,12 +170,12 @@ F = reshape(F, [S*N, M]);
 disp("Solving linear systems")
 
 %% Computing the Z-transform of boundary data
-Lam = repmat(lambda.^(0:M-1),S*N,1);
+Lam = repmat(lambda.^(0:M-1),stages*N,1);
 F = fft(Lam.*F,[],2);
 
 
 %% Solution of the problem in the frequency domains
-alphap_hlf = zeros(Np*S,M);
+alphap_hlf = zeros(Np*stages,M);
 
 
 hbar = parfor_progressbar(floor(M/2),['Solving linear systems... M = ',num2str(M/2)]);
@@ -165,15 +183,15 @@ tic
 for n=0:floor(M/2)
 
 
-    [P,Lambda]=eig(Am1-lambda*zN^(-(n))*B);
+    [P,Lambda]=eig(invA-lambda*zN^(-(n))*B);
     Lambda=diag(Lambda)/dt;
     gl=kron(inv(P),speye(N))*F(:,n+1);
 
-    ul=zeros(S*Np,1);
+    ul=zeros(stages*Np,1);
 
-    for s=1:S
+    for s=1:stages
 
-        k = 1i*Lambda(s)/c;
+        k = 1i*Lambda(s)/wavespeed;
         A = 1i/4*besselh(0, k*sqrt((x1-y1).^2 + (x2-y2).^2));
 
         if min(min(abs(A))) < 1e-20
@@ -206,25 +224,25 @@ idx=@(s) (s-1)*Ntot+1:(s*Ntot);
 idy=@(s) (s-1)*Np+1:(s*Np);
 
 
-u_hlf = zeros(S*Ntot,M);
+u_hlf = zeros(stages*Ntot,M);
 tic
 for n=1:M
-    [P,Lambda]=eig(Am1-lambda*zN^(-(n-1))*B);
+    [P,Lambda]=eig(invA-lambda*zN^(-(n-1))*B);
     Lambda=diag(Lambda)/dt;
 % 
 %     gl=kron(inv(P),speye(Np))*alphap_hlf(:,n);
 
     
     gl=alphap_hlf(:,n);
-    ul=zeros(S*Ntot,1);
+    ul=zeros(stages*Ntot,1);
 
-    for s=1:S
+    for s=1:stages
 
 
     u_s = zeros(Ntot, 1);
 
 
-    k = 1i*Lambda(s)/c;
+    k = 1i*Lambda(s)/wavespeed;
     alpha = gl(idy(s));
     for m = 1:Np
         u_s = u_s+ alpha(m)*1i/4*besselh(0, k*sqrt((pts(:,1)-xp(m, 1)).^2 + (pts(:,2)-xp(m, 2)).^2));
@@ -241,14 +259,14 @@ for n=1:M
 end
 
 % Inverting Z-transform
-Lam = repmat(lambda.^(0:M-1),S*Ntot,1);
+Lam = repmat(lambda.^(0:M-1),stages*Ntot,1);
 
 
 if count == 0
 
 uref = Lam.^(-1).*ifft(u_hlf,[],2);
 
-uref = uref((S-1)*Ntot+1:end,:);
+uref = uref((stages-1)*Ntot+1:end,:);
 
 uref = [zeros(size(uref, 1), 1) uref];
     
@@ -257,7 +275,7 @@ else
 
 u = Lam.^(-1).*ifft(u_hlf,[],2);
 
-u = u((S-1)*Ntot+1:end,:);
+u = u((stages-1)*Ntot+1:end,:);
 
 u = [zeros(size(u, 1), 1) u];
 
@@ -296,7 +314,6 @@ count = 1;
 for M = Ms
 dt = T/M; % time increment
 tt=(0:dt:T);  
-% lambda = max([dt^(3/M) eps^(1/2/M)]); % radious complex 
 lambda = eps^(1/2/M);
 
 zN = exp(2i*pi/(M+1));
@@ -315,7 +332,7 @@ k_hlf = [kl(1) kl(end:-1:(end-1)/2+2)];
 
 
 
-Np = 800;
+Np = 300;
 N = 2*Np;
 %% Create the geometry
 
@@ -361,7 +378,7 @@ alphap_hlf = zeros(Np,M/2+1);
 hbar = parfor_progressbar(M,['Solving linear systems... M = ',num2str(M/2)]);
 for n=1:M/2+1
 
-    k = k_hlf(n)/c;
+    k = k_hlf(n)/wavespeed;
     
     A = 1i/4*besselh(0, k*sqrt((x1-y1).^2 + (x2-y2).^2));
     
@@ -390,7 +407,7 @@ up_hlf = zeros(Ntot,M/2+1);
 
 for n=1:M/2+1
     
-    k = k_hlf(n)/c;  
+    k = k_hlf(n)/wavespeed;  
     for m = 1:Np
     up_hlf(:, n) = up_hlf(:, n)+ alphap_hlf(m, n)*1i/4*besselh(0, k*sqrt((pts(:,1)-xp(m, 1)).^2 + (pts(:,2)-xp(m, 2)).^2));
     end
@@ -441,7 +458,6 @@ end
 
 
 %% Plot Results
-% Ms = [Ms Mmax];
 loglog(Ms, error(:,1), '--gx', ...
       Ms, error(:,2), '--md', ...
       Ms, error(:,3), '--ro', 'Linewidth',2, 'MarkerSize', 14); hold on;

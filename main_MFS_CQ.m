@@ -25,8 +25,23 @@ clc
 clear 
 close all
 
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%
+% Problems:
+%%%%%%%%%%%%%%%%%%%%%%
+% Circle           : 0
+% Rounded Triangle : 1
+% Inverted Ellipse : 2
+%%%%%%%%%%%%%%%%%%%%%%
+problem = 0;
+
+
+
+
 % Wave speeds
-c1 =1; % exterior domain
+wavespeed =1; % exterior domain
 
 N = 600;
 Np = 300;
@@ -42,7 +57,7 @@ zN = exp(2i*pi/(M+1));
 gm = @(z) 0.5*(z.^2-4*z+3);
 sl  = gm(zN.^(0:-1:-M)*lambda)/dt;
 kl = 1i*sl; % complex frequencies
-src = [-2 2];
+
 
 % We just need to compute half of the frequencies
 k_hlf = [kl(1) kl(end:-1:(end-1)/2+2)];
@@ -59,9 +74,15 @@ tp = linspace(0, 2*pi, Np).';
 
 a1 = 0.3;
 a2 = 0.25;
-Z = @(z) z;
-% Z = @(z) z+a1./(z.^2); % Rounded triangle;
-% Z = @(z) z./(1+a2.*z.^2); % Inverted ellipse;
+
+if problem == 0
+    Z = @(z) z; % Circle
+elseif problem == 1
+    Z = @(z) z+a1./(z.^2); % Rounded triangle;
+else
+    Z = @(z) z./(1+a2.*z.^2); % Inverted ellipse;
+end
+
 expN = exp(2i*pi/N);
 z1 = Z(R*expN.^(0:N-1)).';
 x = [real(z1) imag(z1)];
@@ -84,10 +105,7 @@ y2 = repmat(xp(:, 2).',N, 1);
 g = zeros(N,M+1); 
 
 for n=1:M+1
-        
-
     [g(:,n),~] = incident_field(x,tt(n));
-
 end
 
 g = -g;
@@ -105,7 +123,7 @@ phip_hlf = zeros(Np,M/2+1);
 
 for n=1:M/2+1
 
-    k1 = k_hlf(n)/c1;
+    k1 = k_hlf(n)/wavespeed;
     
     A = 1i/4*besselh(0, k1*sqrt((x1-y1).^2 + (x2-y2).^2));
 
@@ -135,7 +153,7 @@ up_hlf = zeros(size(pts,1),M/2+1);
 
 for n=1:M/2+1
     
-    k1 = k_hlf(n)/c1;  
+    k1 = k_hlf(n)/wavespeed;  
     for m = 1:Np
     up_hlf(:, n) = up_hlf(:, n)+ phip_hlf(m, n)*1i/4*besselh(0, k1*sqrt((pts(:,1)-xp(m, 1)).^2 + (pts(:,2)-xp(m, 2)).^2));
     end
@@ -171,8 +189,6 @@ Y = reshape(pts(:,2),Ny,Nx);
 
 
 
-% vid =  VideoWriter('acoustic.mp4','MPEG-4');
-% open(vid)
 
 
 for n=1:M+1
@@ -194,13 +210,11 @@ for n=1:M+1
     set(gca,'Xticklabel',[]) %to just get rid of the numbers but leave the ticks.
     set(gca,'Yticklabel',[]) %to just get rid of the numbers but leave the ticks.
     
-%     frm = getframe(gcf);
-%     writeVideo(vid,frm)
     drawnow
     
     pause(dt)
 
 end
 
-% close(vid)
+
 
