@@ -1,9 +1,9 @@
 # CQ-MFS
 Convolution Quadrature methods with the Method of Fundamental Solutions for exterior acoustic scattering
 
-**Author**: Ignacio Labarca, Seminar for Applied Mathematics, ETH Zurich.
-**email**:  ignacio.labarca@sam.math.ethz.ch.
-**date**:   September 2020.
+**Author**: Ignacio Labarca, Seminar for Applied Mathematics, ETH Zurich.\
+**email**:  ignacio.labarca@sam.math.ethz.ch\
+**date**:   September 2020.  
 
 
 Details can be found in the [report](https://math.ethz.ch/sam/research/reports.html?id=922).
